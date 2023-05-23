@@ -27,22 +27,19 @@ async def start_cmd(message: types.Message):
         user = User(name=message.from_user.username, telegram_id=message.from_user.id)
         db_session.add(user)
         db_session.commit()
-        await message.answer("Привет! Для участия в квизе введи `/quiz` или выбери пункт меню")
-    else:
-        # user exists, let's check if they finished quiz already
-        if user.succeeded:
-            await message.answer("Спасибо за активность, но вы уже участвовали")
-        else:
-            await message.answer("Привет! Для участия в квизе введи `/quiz` или выбери пункт меню")
-        
+    await message.answer("Привет! Для участия в квизе введи `/quiz` или выбери пункт меню")
 
 
 # @dp.message_handler(commands=["quiz"])
 async def quiz_cmd(message: types.Message):
     db_session = message.conf['db_session']
-    await Quiz.q_number.set()
-    question = db_session.query(Question).first()
-    await message.answer(f"Первый вопрос: {question}")
+    user = db_session.query(User).filter_by(telegram_id=message.from_user.id).first()
+    if user and user.succeeded:
+        await message.answer("Спасибо за активность, но вы уже участвовали")
+    else:
+        await Quiz.q_number.set()
+        question = db_session.query(Question).first()
+        await message.answer(f"Первый вопрос: {question}")
 
 
 
@@ -104,5 +101,5 @@ async def set_default_commands(dp):
 def register_hadlers(dp: Dispatcher):
     dp.register_message_handler(start_cmd, commands=["start"])
     dp.register_message_handler(quiz_cmd, commands=["quiz"])
+    dp.register_message_handler(cancel_quiz, commands=["cancel"], state="*")    
     dp.register_message_handler(process_answer, state=Quiz.q_number)
-    dp.register_message_handler(cancel_quiz, state="*")    
