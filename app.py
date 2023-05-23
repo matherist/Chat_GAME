@@ -1,10 +1,10 @@
 import asyncio
-# from aiogram import executor
-# from fastapi import FastAPI
-# from uvicorn import Config, Server
-# from sqlalchemy.orm import Session
-# from sqladmin import Admin, ModelView
-# from models import engine, SessionLocal, User, Question, Answer
+from aiogram import executor
+from fastapi import FastAPI
+from uvicorn import Config, Server
+from sqlalchemy.orm import Session
+from sqladmin import Admin, ModelView
+from models import engine, SessionLocal, User, Question, Answer
 from bot import dp
 from admin import app
 from handlers import register_hadlers, set_default_commands

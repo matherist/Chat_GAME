@@ -9,7 +9,7 @@ from aiogram.dispatcher import FSMContext
 # from aiogram.contrib.middlewares.logging import LoggingMiddleware
 from models import User, Question, Answer, SessionLocal
 # from middlewares import SQLAlchemySessionManager
-from sqlalchemy import and_
+from sqlalchemy import and_, desc
 from config import dp
 
 
@@ -17,6 +17,28 @@ from config import dp
 class Quiz(StatesGroup):
     q_number = State()
 
+
+
+async def update_q_number(state: FSMContext, num: int):
+    await state.update_data(q_number=num)
+
+
+async def get_current_question_from_state(state: FSMContext):
+    question_number = await state.get_data()
+    question_number = question_number.get('q_number', 1)
+    return question_number
+
+def check_answer(answer: str, question_number: int, db_session):
+    correct_answer = db_session.query(Answer).filter_by(
+        question_id=question_number, 
+        correct=True).first()
+    return correct_answer if correct_answer.text.lower() == answer else None   
+
+
+async def send_question(message: types.Message, question: str, retry = False):
+    if retry:
+        question = f"К сожалению неправильно. Попробуйте еще раз. {question}"
+    await message.answer(question)
 
 # @dp.message_handler(commands=["Start"])
 async def start_cmd(message: types.Message):
@@ -38,41 +60,33 @@ async def quiz_cmd(message: types.Message):
         await message.answer("Спасибо за активность, но вы уже участвовали")
     else:
         await Quiz.q_number.set()
-        question = db_session.query(Question).first()
-        await message.answer(f"Первый вопрос: {question}")
-
-
-
-def check_answer(answer: str, question_number: int, db_session):
-    correct_answer = db_session.query(Answer).filter_by(
-        question_id=question_number, 
-        correct=True).first()
-    return correct_answer if correct_answer.text.lower() == answer else None    
-
-
-async def send_question(message: types.Message, question: str, retry = False):
-    if retry:
-        question = f"К сожалению неправильно. Попробуйте еще раз. {question}"
-    await message.answer(question)
+        state = dp.current_state()
+        first_question = db_session.query(Question).first()
+        if first_question:
+            await update_q_number(state, first_question.id)
+            await message.answer(f"Первый вопрос: {first_question}")
 
 
 async def process_answer(message: types.Message, state: FSMContext):
     db_session = message.conf['db_session']
-    question_number = await state.get_data()
-    question_number = question_number.get('q_number', 1)
-    current_question = db_session.query(Question).filter(Question.id == question_number).first()
-    length = db_session.query(Question.id).count()
     answer = message.text.strip().lower()
-    if question_number < length:
-        if check_answer(answer, question_number, db_session):
-            next_question = db_session.query(Question).filter(Question.id > question_number).first()
+
+    q_num = await get_current_question_from_state(state)
+    current_question = db_session.query(Question).filter(Question.id == q_num).first()
+    length = db_session.query(Question).order_by(desc('id')).first().id
+
+    if q_num < length:
+        if check_answer(answer, q_num, db_session):
+            # switch to next question if answer was correct
+            next_question = db_session.query(Question).filter(Question.id > q_num).first()
             await send_question(message, next_question.text)
-            await state.update_data(q_number = next_question.id)
+            await update_q_number(state, next_question.id)
         else:
+            # wrong answer for current question
             await send_question(message, current_question.text, True)
     else:
         # last question answered
-        if check_answer(answer, question_number, db_session):
+        if check_answer(answer, q_num, db_session):
             await message.answer("Cool, your flag is {SUCCESS}")
             the_user = db_session.query(User).filter(User.telegram_id == message.from_user.id).first()
             if the_user:
@@ -80,7 +94,7 @@ async def process_answer(message: types.Message, state: FSMContext):
                 db_session.commit()
             await state.finish()
         else:
-            await send_question(message, current_question.text)
+            await send_question(message, current_question.text, True)
 
 
 

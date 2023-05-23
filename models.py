@@ -32,7 +32,7 @@ class Question(Base):
     answers = relationship("Answer", back_populates="question")
 
     def __str__(self):
-        return f"{self.text[:35]}"
+        return f"{self.text[:50]}"
 
         
 class Answer(Base):
@@ -45,7 +45,7 @@ class Answer(Base):
     question = relationship("Question", back_populates="answers")
 
     def __str__(self):
-        return self.text[:35]
+        return self.text[:50]
 
 Base.metadata.create_all(engine)
 
