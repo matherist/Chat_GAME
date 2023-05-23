@@ -21,10 +21,20 @@ class Quiz(StatesGroup):
 # @dp.message_handler(commands=["Start"])
 async def start_cmd(message: types.Message):
     db_session = message.conf['db_session']
-    user = User(name=message.from_user.username, telegram_id=message.from_user.id)
-    db_session.add(user)
-    db_session.commit()
-    await message.answer("Привет! Для участия в квизе введи `/quiz` или выбери пункт меню")
+    user = db_session.query(User).filter_by(telegram_id=message.from_user.id).first()
+    if not user:
+        # user does not exist yet, lets create one
+        user = User(name=message.from_user.username, telegram_id=message.from_user.id)
+        db_session.add(user)
+        db_session.commit()
+        await message.answer("Привет! Для участия в квизе введи `/quiz` или выбери пункт меню")
+    else:
+        # user exists, let's check if they finished quiz already
+        if user.succeeded:
+            await message.answer("Спасибо за активность, но вы уже участвовали")
+        else:
+            await message.answer("Привет! Для участия в квизе введи `/quiz` или выбери пункт меню")
+        
 
 
 # @dp.message_handler(commands=["quiz"])
@@ -71,7 +81,7 @@ async def process_answer(message: types.Message, state: FSMContext):
             if the_user:
                 the_user.succeeded = True
                 db_session.commit()
-            await state.flush()
+            await state.finish()
         else:
             await send_question(message, current_question.text)
 
@@ -87,6 +97,7 @@ async def set_default_commands(dp):
         types.BotCommand("start", "Запустить бота"),
         types.BotCommand("help", "Помощь"),
         types.BotCommand("quiz", "Запустить квиз"),
+        types.BotCommand("cancel", "Остановить квиз"),
     ])
 
 
